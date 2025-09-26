@@ -326,6 +326,8 @@ bt_navigator:
       - nav2_drive_on_heading_cancel_bt_node
       - nav2_is_battery_charging_condition_bt_node
 
+
+# 规划器
 controller_server:
   ros__parameters:
     use_sim_time: True
@@ -338,113 +340,104 @@ controller_server:
     progress_checker_plugins: ["progress_checker"]
     goal_checker_plugins: ["general_goal_checker"]
     controller_plugins: ["FollowPath"]
+    
     progress_checker:
       plugin: "nav2_controller::SimpleProgressChecker"
       required_movement_radius: 0.5
       movement_time_allowance: 10.0
+    
     general_goal_checker:
       stateful: True
       plugin: "nav2_controller::SimpleGoalChecker"
-      xy_goal_tolerance: 0.15
-      yaw_goal_tolerance: 6.28
+      xy_goal_tolerance: 0.25
+      yaw_goal_tolerance: 0.35
+    
     FollowPath:
       plugin: "teb_local_planner::TebLocalPlannerROS"
-      teb_autosize: 1.0
-      dt_ref: 0.4
-      dt_hysteresis: 0.08
-      min_samples: 3
-      max_samples: 1000
-      global_plan_overwrite_orientation: True                #覆盖全局路径中局部路径点的朝向
-      force_reinit_new_goal_dist: 1.0
-      allow_init_with_backwards_motion: False                 #允许在开始时想后退来执行轨迹
-      max_global_plan_lookahead_dist: 1.3                     #考虑优化的全局计划子集的最大长度（累积欧几里得距离）（如果为0或负数：禁用；长度也受本地Costmap大小的限制）
-      global_plan_viapoint_sep: 0.25
-      global_plan_prune_distance: 1.0
-      exact_arc_length: False                                 #如果为真，规划器在速度、加速度和转弯率计算中使用精确的弧长[->增加的CPU时间]，否则使用欧几里德近似
-      feasibility_check_no_poses: 2
-      publish_feedback: False
-          
-      # Robot
-              
-      max_vel_x: 1.5
-      max_vel_x_backwards: 0.1
-      max_vel_theta: 1.0 
-      acc_lim_x: 1.0
-      acc_lim_theta: 1.5
-      is_footprint_dynamic: false
-      min_turning_radius: 0.0
       
-      footprint_model: # types: "point", "circular", "two_circles", "line", "polygon"
+      # 轨迹生成
+      teb_autosize: 1.0
+      dt_ref: 0.3
+      dt_hysteresis: 0.1
+      min_samples: 3
+      max_samples: 200
+      
+      # 关键修改：路径跟踪
+      global_plan_overwrite_orientation: False  # 改为False，不覆盖朝向
+      allow_init_with_backwards_motion: False
+      max_global_plan_lookahead_dist: 4.0  # 增加到4米
+      global_plan_viapoint_sep: 0.5  # 增加间距
+      global_plan_prune_distance: 1.0
+      force_reinit_new_goal_dist: 1.0
+      exact_arc_length: False
+      feasibility_check_no_poses: 4
+      publish_feedback: True
+      
+      # 速度限制
+      max_vel_x: 0.6  # 适中的前进速度
+      max_vel_x_backwards: 0.2
+      max_vel_y: 0.0  # 差速驱动
+      max_vel_theta: 0.5  # 降低旋转速度
+      
+      acc_lim_x: 0.3
+      acc_lim_y: 0.0
+      acc_lim_theta: 0.3
+      
+      # 机器人模型
+      min_turning_radius: 0.0
+      wheelbase: 0.0
+      cmd_angle_instead_rotvel: False
+      
+      footprint_model:
         type: "circular"
-        radius: 0.13 # for type "circular"
-
-      free_goal_vel: False
-          
-      # Obstacles
-          
-      min_obstacle_dist: 0.02                             #和障碍物最小距离
-      inflation_dist: 0.1                                 #障碍物膨胀距离
-      include_costmap_obstacles: False                     #costmap 中的障碍物是否被直接考虑
+        radius: 0.15
+      
+      # 障碍物
+      min_obstacle_dist: 0.1
+      inflation_dist: 0.15
+      include_costmap_obstacles: True
       costmap_obstacles_behind_robot_dist: 1.0
-      obstacle_poses_affected: 15
-
-      dynamic_obstacle_inflation_dist: 0.1             #动态障碍物的膨胀范围
-      include_dynamic_obstacles: True                   #是否将动态障碍物预测为速度模型
-      legacy_obstacle_association: False                #是否严格遵循局部规划出来的路径，
-
-      costmap_converter_plugin: "costmap_converter::CostmapToPolygonsDBSMCCH"
-      costmap_converter_spin_thread: True
-      costmap_converter_rate: 10
-
-      # Optimization
-          
+      obstacle_poses_affected: 10
+      
+      # 禁用动态障碍物和costmap转换
+      include_dynamic_obstacles: False
+      costmap_converter_plugin: ""
+      costmap_converter_spin_thread: False
+      
+      # 优化
       no_inner_iterations: 5
       no_outer_iterations: 4
       optimization_activate: True
       optimization_verbose: False
-      penalty_epsilon: 0.07
+      penalty_epsilon: 0.1
       obstacle_cost_exponent: 4.0
+      
+      # 关键修改：权重调整
       weight_max_vel_x: 2.0
+      weight_max_vel_y: 0.0
       weight_max_vel_theta: 1.0
       weight_acc_lim_x: 1.0
+      weight_acc_lim_y: 0.0
       weight_acc_lim_theta: 1.0
-      weight_kinematics_nh: 1000.0
-      weight_kinematics_forward_drive: 1000.0
-      weight_kinematics_turning_radius: 1.0
-      weight_optimaltime: 2.0 # must be > 0
-      weight_shortest_path: 0.0
-      weight_obstacle: 70.0
-      weight_inflation: 0.1
-      weight_dynamic_obstacle: 1000.0 # not in use yet
-      weight_dynamic_obstacle_inflation: 0.1
-      weight_viapoint: 30.0
-      weight_adapt_factor: 2.0
-
-      # Homotopy Class Planner
-
-      enable_homotopy_class_planning: False
-      enable_multithreading: False
-      max_number_classes: 4
-      selection_cost_hysteresis: 5.0
-      selection_prefer_initial_plan: 1.0
-      selection_obst_cost_scale: 1.0
-      selection_alternative_time_cost: True
-
-      roadmap_graph_no_samples: 15
-      roadmap_graph_area_width: 5.0
-      roadmap_graph_area_length_scale: 1.0
-      h_signature_prescaler: 0.5
-      h_signature_threshold: 0.1
-      obstacle_heading_threshold: 0.45
-      switching_blocking_period: 0.0
-      viapoints_all_candidates: True
-      delete_detours_backwards: True
-      max_ratio_detours_duration_best_duration: 3.0
-      visualize_hc_graph: False
-      visualize_with_time_as_z_axis_scale: 0.0
-
-      # Recovery
       
+      # 大幅降低这些权重
+      weight_kinematics_nh: 100.0  # 从1000降到100
+      weight_kinematics_forward_drive: 1.0  # 从1000降到1
+      weight_kinematics_turning_radius: 0.0
+      
+      # 平衡其他权重
+      weight_optimaltime: 1.0  # 时间最优
+      weight_shortest_path: 1.0  # 增加最短路径权重
+      weight_obstacle: 30.0
+      weight_inflation: 0.1
+      weight_viapoint: 10.0  # 增加路径点跟踪
+      weight_adapt_factor: 2.0
+      
+      # 避免原地旋转的额外参数
+      free_goal_vel: False
+      complete_global_plan: True
+      
+      # 恢复行为
       shrink_horizon_backup: True
       shrink_horizon_min_duration: 10.0
       oscillation_recovery: True
